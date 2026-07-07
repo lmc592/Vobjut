@@ -34,6 +34,7 @@ export default function Quotes() {
   const [overhead, setOverhead] = useState("10");
   const [profit, setProfit] = useState("15");
   const [contingency, setContingency] = useState("5");
+  const [recommendation, setRecommendation] = useState("");
   const [rateModal, setRateModal] = useState(false);
   const [estimatorOpen, setEstimatorOpen] = useState(false);
 
@@ -76,7 +77,19 @@ export default function Quotes() {
   }
 
   function resetBuilder() {
-    setTitle(""); setCustomerId(null); setItems([]); setOverhead("10"); setProfit("15"); setContingency("5"); setEditingId(null);
+    setTitle(""); setCustomerId(null); setItems([]); setOverhead("10"); setProfit("15"); setContingency("5"); setEditingId(null); setRecommendation("");
+  }
+
+  async function recommendMargins() {
+    if (items.length === 0) return;
+    try {
+      const res = await api<{ contingency: number; overhead: number; profit: number; rationale: string[] }>(
+        "/recommend-margins", { method: "POST", body: { items } });
+      setContingency(String(res.contingency));
+      setOverhead(String(res.overhead));
+      setProfit(String(res.profit));
+      setRecommendation(res.rationale.join(" · "));
+    } catch {}
   }
 
   function openEditor(quote: any) {
@@ -230,6 +243,19 @@ export default function Quotes() {
               </View>
             ))}
 
+            <View style={styles.rowBetween}>
+              <Text style={styles.label}>Margins</Text>
+              <Pressable style={styles.addLine} onPress={recommendMargins} testID="recommend-margins-button">
+                <Ionicons name="sparkles" size={16} color={theme.colors.primary} />
+                <Text style={styles.addLineText}>Recommend %</Text>
+              </Pressable>
+            </View>
+            {!!recommendation && (
+              <View style={styles.recommendBox} testID="recommendation-text">
+                <Ionicons name="bulb" size={14} color={theme.colors.warning} />
+                <Text style={styles.recommendText}>{recommendation}</Text>
+              </View>
+            )}
             <View style={styles.rowBetween}>
               <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={styles.label}>Contingency %</Text>
@@ -416,6 +442,8 @@ const styles = StyleSheet.create({
   blabel: { color: theme.colors.textMuted, fontSize: 14 },
   bval: { color: theme.colors.text, fontSize: 14, fontWeight: "600" },
   divider: { height: 1, backgroundColor: theme.colors.border, marginVertical: 6 },
+  recommendBox: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: theme.colors.warning + "18", borderRadius: theme.radius.sm, padding: theme.spacing.sm, marginBottom: theme.spacing.sm },
+  recommendText: { color: theme.colors.text, fontSize: 12, flex: 1 },
   versionRow: { flexDirection: "row", justifyContent: "space-between", backgroundColor: theme.colors.surface, borderRadius: theme.radius.md, padding: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.border, marginBottom: 6 },
   detailAction: { flexDirection: "row", gap: 8, backgroundColor: theme.colors.primary, height: 50, borderRadius: theme.radius.md, alignItems: "center", justifyContent: "center" },
   detailActionText: { color: "#fff", fontWeight: "700", fontSize: 15 },

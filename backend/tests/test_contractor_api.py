@@ -40,6 +40,58 @@ def test_calculate_quote_formula(s, api, owner_a):
     assert d["gst"] == 1201.75
     assert d["final_total"] == 13219.25
 
+# ---- Recommend margins ----
+def test_recommend_margins_small_low_risk_fencing(s, api, owner_a):
+    """Small (~$1.1k) low-risk fencing → cont 7.5, oh 15, profit 25."""
+    h = auth(owner_a["token"])
+    payload = {"items":[
+        {"description":"Timber paling fence","kind":"material","quantity":10,"unit":"m","unit_rate":85},
+        {"description":"Gate hardware","kind":"material","quantity":1,"unit":"ea","unit_rate":250},
+    ]}
+    r = s.post(f"{api}/recommend-margins", json=payload, headers=h)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["contingency"] == 7.5, d
+    assert d["overhead"] == 15.0, d
+    assert d["profit"] == 25.0, d
+    assert "rationale" in d and len(d["rationale"]) >= 1
+
+def test_recommend_margins_large_high_risk_earthworks(s, api, owner_a):
+    """Large (~$56k) high-risk earthworks + retaining → cont 10, oh 8, profit 15."""
+    h = auth(owner_a["token"])
+    payload = {"items":[
+        {"description":"Earthworks excavation","kind":"labour","quantity":80,"unit":"hr","unit_rate":220},
+        {"description":"Retaining wall sleepers","kind":"material","quantity":300,"unit":"m2","unit_rate":130},
+    ]}
+    r = s.post(f"{api}/recommend-margins", json=payload, headers=h)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["contingency"] == 10.0, d
+    assert d["overhead"] == 8.0, d
+    assert d["profit"] == 15.0, d
+
+def test_recommend_margins_medium_concrete_slab(s, api, owner_a):
+    """Medium (~$12k) concrete slab → cont 7.5, oh 12, profit 20."""
+    h = auth(owner_a["token"])
+    payload = {"items":[
+        {"description":"Concrete slab","kind":"material","quantity":100,"unit":"m2","unit_rate":120},
+    ]}
+    r = s.post(f"{api}/recommend-margins", json=payload, headers=h)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["contingency"] == 7.5, d
+    assert d["overhead"] == 12.0, d
+    assert d["profit"] == 20.0, d
+
+def test_recommend_margins_empty_items(s, api, owner_a):
+    """Zero items → direct_cost 0 → still returns defaults (small band, low risk)."""
+    h = auth(owner_a["token"])
+    r = s.post(f"{api}/recommend-margins", json={"items":[]}, headers=auth(owner_a["token"]))
+    assert r.status_code == 200, r.text
+    d = r.json()
+    for k in ("contingency","overhead","profit","rationale"):
+        assert k in d
+
 # ---- Contingency in calculation ----
 def test_calculate_quote_with_contingency(s, api, owner_a):
     # direct 6000 @10% contingency => contingency 600, subtotal 6600

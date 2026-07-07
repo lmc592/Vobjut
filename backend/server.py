@@ -229,6 +229,11 @@ class TemplateInput(BaseModel):
     params: Dict[str, Any] = {}
 
 
+class RecommendInput(BaseModel):
+    items: List[QuoteLineInput] = []
+    direct_cost: Optional[float] = None
+
+
 class QuoteStatusInput(BaseModel):
     status: str
 
@@ -632,6 +637,56 @@ async def del_rate(rid: str, user: dict = Depends(require_role("ADMIN"))):
 # ---------------------------------------------------------------------------
 # Calculation engine endpoint
 # ---------------------------------------------------------------------------
+def recommend_margins(direct_cost: float, descriptions: List[str]) -> Dict[str, Any]:
+    """Suggest contingency / overhead / profit % from job size and risk profile.
+    Heuristic industry defaults for VIC contractors — always editable by the user."""
+    text = " ".join(descriptions).lower()
+    high_risk_kw = ["earthwork", "excavat", "retaining", "sleeper", "cut & fill",
+                    "soil", "tipper", "drainage", "backfill", "footing"]
+    med_risk_kw = ["concrete", "slab", "paving", "crushed rock"]
+    if any(k in text for k in high_risk_kw):
+        risk = "high"
+    elif any(k in text for k in med_risk_kw):
+        risk = "medium"
+    else:
+        risk = "low"
+    contingency = {"low": 5.0, "medium": 7.5, "high": 10.0}[risk]
+    if direct_cost < 2000:
+        contingency += 2.5  # small jobs carry more estimate risk
+
+    # Overhead & profit scale inversely with job size (fixed costs spread further,
+    # large jobs are more competitive)
+    if direct_cost < 5000:
+        overhead, profit, band = 15.0, 25.0, "small (< $5k)"
+    elif direct_cost < 20000:
+        overhead, profit, band = 12.0, 20.0, "$5k–$20k"
+    elif direct_cost < 50000:
+        overhead, profit, band = 10.0, 17.5, "$20k–$50k"
+    elif direct_cost < 150000:
+        overhead, profit, band = 8.0, 15.0, "$50k–$150k"
+    else:
+        overhead, profit, band = 6.0, 12.0, "large (> $150k)"
+
+    rationale = [
+        f"{risk.title()}-risk work → {contingency}% contingency",
+        f"Job size {band} → {overhead}% overheads",
+        f"{profit}% profit margin for this job size",
+    ]
+    return {"contingency": round(contingency, 1), "overhead": overhead,
+            "profit": profit, "risk": risk, "direct_cost": round(direct_cost, 2),
+            "rationale": rationale}
+
+
+@api_router.post("/recommend-margins")
+async def recommend_margins_endpoint(inp: RecommendInput, user: dict = Depends(get_current_user)):
+    if inp.direct_cost is not None:
+        direct_cost = inp.direct_cost
+    else:
+        direct_cost = sum(round(i.quantity * i.unit_rate, 2) for i in inp.items)
+    descriptions = [i.description for i in inp.items]
+    return recommend_margins(direct_cost, descriptions)
+
+
 @api_router.post("/calculate-quote")
 async def calc_quote(inp: CalculateInput, user: dict = Depends(get_current_user)):
     return calculate_project_quote(inp)
