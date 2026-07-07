@@ -24,6 +24,7 @@ export default function Quotes() {
   const [rates, setRates] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [builder, setBuilder] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
 
   // builder state
@@ -75,20 +76,37 @@ export default function Quotes() {
   }
 
   function resetBuilder() {
-    setTitle(""); setCustomerId(null); setItems([]); setOverhead("10"); setProfit("15"); setContingency("5");
+    setTitle(""); setCustomerId(null); setItems([]); setOverhead("10"); setProfit("15"); setContingency("5"); setEditingId(null);
+  }
+
+  function openEditor(quote: any) {
+    setEditingId(quote.id);
+    setTitle(quote.title || "");
+    setCustomerId(quote.customer_id || null);
+    setItems((quote.items || []).map((it: any) => ({
+      description: it.description, kind: it.kind, quantity: it.quantity,
+      unit: it.unit, unit_rate: it.unit_rate, pricing_rate_id: it.pricing_rate_id || null,
+    })));
+    setOverhead(String(quote.overhead_percentage ?? 10));
+    setProfit(String(quote.profit_percentage ?? 15));
+    setContingency(String(quote.contingency_percentage ?? 0));
+    setDetail(null);
+    setBuilder(true);
   }
 
   async function saveQuote() {
     if (!title.trim() || items.length === 0) return;
-    await api("/quotes", {
-      method: "POST",
-      body: {
-        title, customer_id: customerId, items,
-        contingency_percentage: parseFloat(contingency) || 0,
-        overhead_percentage: parseFloat(overhead) || 0,
-        profit_percentage: parseFloat(profit) || 0,
-      },
-    });
+    const body = {
+      title, customer_id: customerId, items,
+      contingency_percentage: parseFloat(contingency) || 0,
+      overhead_percentage: parseFloat(overhead) || 0,
+      profit_percentage: parseFloat(profit) || 0,
+    };
+    if (editingId) {
+      await api(`/quotes/${editingId}`, { method: "PUT", body });
+    } else {
+      await api("/quotes", { method: "POST", body });
+    }
     resetBuilder(); setBuilder(false); load();
   }
 
@@ -163,14 +181,14 @@ export default function Quotes() {
         )}
       />
 
-      <Fab onPress={() => setBuilder(true)} testID="quote-add-button" />
+      <Fab onPress={() => { resetBuilder(); setBuilder(true); }} testID="quote-add-button" />
 
       {/* Quote builder */}
-      <Modal visible={builder} animationType="slide" onRequestClose={() => setBuilder(false)}>
+      <Modal visible={builder} animationType="slide" onRequestClose={() => { resetBuilder(); setBuilder(false); }}>
         <View style={[styles.container, { paddingTop: insets.top }]}>
           <View style={styles.builderHeader}>
-            <Pressable onPress={() => setBuilder(false)} testID="builder-close"><Ionicons name="close" size={26} color={theme.colors.text} /></Pressable>
-            <Text style={styles.builderTitle}>Quote Builder</Text>
+            <Pressable onPress={() => { resetBuilder(); setBuilder(false); }} testID="builder-close"><Ionicons name="close" size={26} color={theme.colors.text} /></Pressable>
+            <Text style={styles.builderTitle}>{editingId ? "Edit Quote" : "Quote Builder"}</Text>
             <Pressable onPress={saveQuote} testID="builder-save"><Text style={styles.saveLink}>Save</Text></Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: theme.spacing.md, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
@@ -333,6 +351,12 @@ export default function Quotes() {
               </ScrollView>
 
               <View style={{ marginTop: theme.spacing.md, gap: theme.spacing.sm }}>
+                {(detail.status === "DRAFT" || detail.status === "SENT") && (
+                  <Pressable style={styles.detailAction} onPress={() => openEditor(detail)} testID="detail-edit">
+                    <Ionicons name="create" size={16} color="#fff" />
+                    <Text style={styles.detailActionText}>Edit Quote (adjust items & margins)</Text>
+                  </Pressable>
+                )}
                 {detail.status === "ACCEPTED" && (
                   <Pressable style={[styles.detailAction, { backgroundColor: theme.colors.success }]} onPress={() => toJob(detail)} testID="detail-tojob">
                     <Ionicons name="hammer" size={16} color="#fff" />

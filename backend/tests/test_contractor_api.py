@@ -56,6 +56,38 @@ def test_calculate_quote_with_contingency(s, api, owner_a):
     assert d["gst"] == 834.9
     assert d["final_total"] == 9183.9
 
+def test_quote_edit_adjusts_margins_and_bumps_version(s, api, owner_a):
+    """Iteration: PUT /quotes/{id} recalculates breakdown + bumps version when profit/contingency/overhead/items change (DRAFT/SENT only)."""
+    h = auth(owner_a["token"])
+    cust = s.post(f"{api}/customers", json={"name":"TEST_EditCust"}, headers=h).json()
+    payload = {
+        "title":"TEST_EditQuote","customer_id":cust["id"],
+        "items":[
+            {"description":"Concrete","kind":"material","quantity":50,"unit":"m2","unit_rate":120},
+            {"description":"Labour","kind":"labour","quantity":10,"unit":"hr","unit_rate":350},
+        ],
+        "overhead_percentage":10,"profit_percentage":15,"contingency_percentage":5
+    }
+    r = s.post(f"{api}/quotes", json=payload, headers=h); assert r.status_code == 200, r.text
+    q = r.json(); qid = q["id"]
+    v1_final = q["breakdown"]["final_total"]; assert q["version"] == 1
+    # Adjust profit 15->25 and contingency 5->10 (per spec)
+    payload2 = {**payload, "profit_percentage":25, "contingency_percentage":10}
+    r2 = s.put(f"{api}/quotes/{qid}", json=payload2, headers=h)
+    assert r2.status_code == 200, r2.text
+    q2 = r2.json()
+    assert q2["version"] == 2
+    assert q2["breakdown"]["final_total"] != v1_final
+    assert q2["profit_percentage"] == 25 and q2["contingency_percentage"] == 10
+    # GET verifies persistence
+    rg = s.get(f"{api}/quotes/{qid}", headers=h).json()
+    assert rg["version"] == 2 and rg["profit_percentage"] == 25 and rg["contingency_percentage"] == 10
+    # Move to ACCEPTED and confirm edit forbidden
+    s.patch(f"{api}/quotes/{qid}/status", json={"status":"SENT"}, headers=h)
+    s.patch(f"{api}/quotes/{qid}/status", json={"status":"ACCEPTED"}, headers=h)
+    r3 = s.put(f"{api}/quotes/{qid}", json=payload2, headers=h)
+    assert r3.status_code == 400, f"Expected 400 for editing ACCEPTED quote, got {r3.status_code}: {r3.text}"
+
 def test_quote_create_with_contingency_and_status_any_direction(s, api, owner_a):
     h = auth(owner_a["token"])
     cust = s.post(f"{api}/customers", json={"name":"TEST_ContingCust"}, headers=h).json()

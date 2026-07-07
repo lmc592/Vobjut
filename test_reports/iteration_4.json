@@ -1,0 +1,43 @@
+{
+  "summary": "Verified new EDIT QUOTE feature end-to-end (backend + frontend). Backend: added test_quote_edit_adjusts_margins_and_bumps_version which posts a quote (profit 15, contingency 5), then PUT /quotes/{id} with profit 25 / contingency 10 — verified version bumps 1->2, breakdown recalculates, GET reflects new margins, then moves quote to ACCEPTED and confirms PUT returns 400. 15/16 pytest cases pass (only pre-existing unrelated test_auth_me case-sensitivity failure remains; unrelated to this iteration). Frontend: logged in as jane@acme.com.au, tapped FAB — 'Quote Builder' header shown, editingId reset. Created a quote (1x Concrete slab @ $120, qty 5, cont 5%, OH 10%, profit 15%) with live breakdown Final $876.64. Tapped saved quote card (testID quote-<uuid>) → detail-view opened with detail-edit button visible (status=DRAFT). Tapping detail-edit opened the builder in EDIT mode: header changed to 'Edit Quote', all inputs pre-filled (title, profit=15, cont=5, oh=10, qty0=5). Changed profit 15->25 and contingency 5->10; live quote-breakdown updated in real time to Final $998.25 (Cont 10% $60, OH 10% $66, Profit 25% $181.50, GST $90.75). Tapped builder-save → PUT /api/quotes/{id} succeeded, quote re-opened shows version history 'v2 $998.25' and 'v1 $876.64', margins persisted. Status gating verified: detail-edit visible on DRAFT & SENT; hidden on ACCEPTED, REJECTED and EXPIRED. detail-tojob visible only on ACCEPTED (correctly hidden on REJECTED/EXPIRED). Regression: FAB after edit still opens fresh 'Quote Builder' (not 'Edit Quote') with empty title; builder-close discards and returns to quote list. Same cosmetic RN-web deprecation warnings persist as prior iteration (shadow*, pointerEvents) — non-blocking.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/me (test only)", "issue": "Pre-existing test_auth_me case-sensitivity assertion — backend lowercases emails on register but fixture stores original case. Not a product bug; unrelated to this iteration."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Global styles (RN-web)", "issue": "Console warning: 'shadow*' style props deprecated — migrate to boxShadow. Non-blocking."},
+      {"component": "Global styles (RN-web)", "issue": "Console warning: props.pointerEvents deprecated — use style.pointerEvents. Non-blocking."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_4.json",
+    "/app/backend/tests/test_contractor_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional/pre-existing) Fix test_auth_me email case comparison in /app/backend/tests/test_contractor_api.py (compare via .lower()).",
+    "(Cosmetic) Migrate deprecated RN-web shadow* → boxShadow and props.pointerEvents → style.pointerEvents."
+  ],
+  "critical_code_review_comments": [
+    "openEditor() correctly pre-fills title/customer/items/margins from GET /quotes/{id} and sets editingId; saveQuote branches to PUT when editingId is set, POST otherwise.",
+    "resetBuilder() clears editingId so FAB always opens fresh builder — verified header text conditional (`editingId ? 'Edit Quote' : 'Quote Builder'`).",
+    "detail-edit gated by (detail.status === 'DRAFT' || detail.status === 'SENT') matches backend rule (PUT returns 400 for other states) — verified end-to-end.",
+    "Version history renders v1/v2 with amounts after PUT; live quote-breakdown recomputes via /calculate-quote as inputs change.",
+    "All required testIDs present: detail-edit, quote-add-button, builder-close, builder-save, quote-title-input, contingency-input, overhead-input, profit-input, qty-input-<idx>, add-line-button, quote-<uuid>, quote-detail-view, detail-status-<STATE>, detail-tojob."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_contractor_api.py (added test_quote_edit_adjusts_margins_and_bumps_version)"
+  ],
+  "success_rate": {"backend": "15/16 (94%) — 1 pre-existing unrelated failure", "frontend": "100% — all iteration flows + regressions verified"},
+  "seed_data_creation": "Created 'TEST_Edit_<ts>' quote (Q-0005) via UI with 1x Concrete slab, cycled DRAFT->SENT->ACCEPTED->REJECTED->EXPIRED for status-gating verification; edited from profit 15/cont 5 to profit 25/cont 10 (v1 $876.64 → v2 $998.25).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Edit-Quote feature fully wired. Flow: quote card tap -> quote-detail-view -> detail-edit (only for DRAFT/SENT) -> builder in edit mode with pre-filled fields and 'Edit Quote' header -> mutate inputs -> live quote-breakdown updates -> builder-save -> PUT /api/quotes/{id} bumps version & recalculates. Version history block in detail shows v1/v2 with amounts. FAB always resets editingId, so fresh create still works.",
+  "rca_of_issue": "N/A — feature verification, no bug this iteration."
+}
