@@ -40,6 +40,49 @@ def test_calculate_quote_formula(s, api, owner_a):
     assert d["gst"] == 1201.75
     assert d["final_total"] == 13219.25
 
+# ---- Contingency in calculation ----
+def test_calculate_quote_with_contingency(s, api, owner_a):
+    # direct 6000 @10% contingency => contingency 600, subtotal 6600
+    # overheads 10% of 6600 = 660, subtotal 7260, profit 15% = 1089, pre_gst 8349
+    # gst 10% = 834.9, final = 9183.9
+    payload = {"materials": 6000, "labour": 0, "overhead_percentage":10, "profit_percentage":15, "gst_rate":10, "contingency_percentage":10}
+    r = s.post(f"{api}/calculate-quote", json=payload, headers=auth(owner_a["token"]))
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["direct_cost"] == 6000
+    assert d["contingency"] == 600.0
+    assert d["overheads"] == 660.0
+    assert d["profit"] == 1089.0
+    assert d["gst"] == 834.9
+    assert d["final_total"] == 9183.9
+
+def test_quote_create_with_contingency_and_status_any_direction(s, api, owner_a):
+    h = auth(owner_a["token"])
+    cust = s.post(f"{api}/customers", json={"name":"TEST_ContingCust"}, headers=h).json()
+    q_payload = {
+        "title":"TEST_Contingency_Quote","customer_id":cust["id"],
+        "items":[{"description":"Slab","kind":"material","quantity":50,"unit":"m2","unit_rate":120}],
+        "overhead_percentage":10,"profit_percentage":15,"contingency_percentage":10
+    }
+    r = s.post(f"{api}/quotes", json=q_payload, headers=h)
+    assert r.status_code == 200, r.text
+    q = r.json()
+    qid = q["id"]
+    assert q["breakdown"]["direct_cost"] == 6000
+    assert q["breakdown"]["contingency"] == 600.0
+    assert q["breakdown"]["overheads"] == 660.0
+    assert q["breakdown"]["profit"] == 1089.0
+    assert q["breakdown"]["gst"] == 834.9
+    assert q["breakdown"]["final_total"] == 9183.9
+    # Now test ANY-direction status transitions
+    for st in ["SENT","ACCEPTED","DRAFT","REJECTED","EXPIRED","ACCEPTED"]:
+        rs = s.patch(f"{api}/quotes/{qid}/status", json={"status":st}, headers=h)
+        assert rs.status_code == 200, f"failed to set {st}: {rs.text}"
+        # verify persisted
+        rg = s.get(f"{api}/quotes/{qid}", headers=h)
+        assert rg.status_code == 200
+        assert rg.json()["status"] == st, f"expected {st}, got {rg.json()['status']}"
+
 # ---- Pricing rates ----
 def test_pricing_rates_seeded(s, api, owner_a):
     r = s.get(f"{api}/pricing-rates", headers=auth(owner_a["token"]))

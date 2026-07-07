@@ -1,0 +1,43 @@
+{
+  "summary": "Verified both new features end-to-end. FEATURE 1 (Contingency %): contingency-input renders in Quote Builder alongside Overhead % and Profit %. Live quote-breakdown shows a 'Contingency (10%)' row with the correct amount. Formula validated on backend: direct 6000 @10% contingency => contingency 600, overheads 660, profit 1089, gst 834.9, final 9183.9 (matches spec exactly). UI verified with 1×$120 Concrete slab line: Direct $120 + Cont 10% $12 + OH 10% $13.20 + Profit 15% $21.78 + GST $16.70 = $183.68. Quote saved and re-opened via detail view: contingency row persists (Q-0003). FEATURE 2 (Any-direction status): detail-status-DRAFT/SENT/ACCEPTED/REJECTED/EXPIRED chips all render on quote-detail-view. Successfully transitioned DRAFT→ACCEPTED (forward), ACCEPTED→DRAFT (backward), DRAFT→REJECTED, REJECTED→EXPIRED, EXPIRED→ACCEPTED. detail-tojob button appears exactly when status is ACCEPTED. Backend PATCH /api/quotes/{id}/status confirmed to accept any direction (added test test_quote_create_with_contingency_and_status_any_direction). Regression: quote list loads with 3 quotes, quote detail shows line items + breakdown + version history + Valid until date. Jobs tab: job detail modal shows job-status-* chips (SCHEDULED/IN_PROGRESS/ON_HOLD/COMPLETED visible; CANCELLED is horizontally scrolled off-screen), progress-plus & progress-minus work, status change to IN_PROGRESS persisted. Backend tests: 14/15 pass — the only failure (test_auth_me) is a pre-existing unrelated email-case assertion, not related to this iteration. Cosmetic: same RN-web deprecation warnings as prior iteration (shadow* / pointerEvents).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/me (test fixture)", "issue": "Pre-existing test_auth_me assertion is case-sensitive on email; backend lowercases emails on register. Not a product bug — fix assertion to compare via .lower()."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Global styles (RN-web)", "issue": "Console warning: 'shadow*' style props deprecated — migrate to boxShadow. Non-blocking, warnings only."},
+      {"component": "Global styles (RN-web)", "issue": "Console warning: props.pointerEvents is deprecated — use style.pointerEvents. Non-blocking."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_3.json",
+    "/app/backend/tests/test_contractor_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Fix test_auth_me case-sensitivity in /app/backend/tests/test_contractor_api.py (compare emails lowercased). Pre-existing, unrelated to this iteration.",
+    "(Cosmetic) Migrate deprecated shadow* style props to boxShadow and props.pointerEvents to style.pointerEvents (non-blocking)."
+  ],
+  "critical_code_review_comments": [
+    "Quote builder correctly threads contingency_percentage into POST /api/quotes and live preview via /api/calculate-quote. Formula direct→+contingency→+overheads(on direct+contingency)→+profit→+GST(10%) matches spec.",
+    "quote-detail-view Adjust status row uses a plain PATCH allowing any-direction transitions with immediate re-fetch and highlighted active chip via chipActive style.",
+    "detail-tojob button correctly gated by detail.status === 'ACCEPTED'.",
+    "All required testIDs present and stable: contingency-input, quote-breakdown, quote-add-button, builder-save, add-line-button, quote-title-input, quote-<id>, quote-detail-view, detail-item-<idx>, detail-status-<STATE>, detail-tojob, quote-detail-close.",
+    "Jobs screen retains job-status-* chips and progress-plus/-minus with working PATCH."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_contractor_api.py (added test_calculate_quote_with_contingency and test_quote_create_with_contingency_and_status_any_direction)"
+  ],
+  "success_rate": {"backend": "14/15 pass (93%); only pre-existing unrelated test_auth_me failure", "frontend": "100% — both new features + regressions verified"},
+  "seed_data_creation": "Created Q-0003 'TEST_Contingency_<ts>' (1×$120 Concrete slab, 10% contingency) via UI; walked it through all 5 statuses ending on ACCEPTED. Also cycled the pre-existing Q-0001 job to IN_PROGRESS at 10% via regression check.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Both features verified. Contingency lives in the Quote Builder next to Overhead/Profit (testID=contingency-input) and its row appears in both builder preview (quote-breakdown) and saved detail view. Status can be changed to ANY of DRAFT/SENT/ACCEPTED/REJECTED/EXPIRED via chips in quote-detail-view (testIDs detail-status-<STATE>) — no ordering restriction. detail-tojob only shows for ACCEPTED. Backend now covered by pytest cases for both features.",
+  "rca_of_issue": "N/A (feature addition, no bug this iteration)"
+}

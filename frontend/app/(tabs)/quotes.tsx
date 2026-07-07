@@ -15,6 +15,7 @@ const KIND_FOR_CATEGORY: Record<string, string> = {
   Materials: "material", Labour: "labour", Equipment: "equipment",
 };
 const QUOTE_NEXT: Record<string, string> = { DRAFT: "SENT", SENT: "ACCEPTED" };
+const QUOTE_STATUSES = ["DRAFT", "SENT", "ACCEPTED", "REJECTED", "EXPIRED"];
 
 export default function Quotes() {
   const insets = useSafeAreaInsets();
@@ -31,6 +32,7 @@ export default function Quotes() {
   const [items, setItems] = useState<any[]>([]);
   const [overhead, setOverhead] = useState("10");
   const [profit, setProfit] = useState("15");
+  const [contingency, setContingency] = useState("5");
   const [rateModal, setRateModal] = useState(false);
   const [estimatorOpen, setEstimatorOpen] = useState(false);
 
@@ -48,13 +50,15 @@ export default function Quotes() {
     const map: any = { material: "materials", labour: "labour", equipment: "equipment", subcontractor: "subcontractors", delivery: "delivery", waste: "waste" };
     items.forEach((it) => { buckets[map[it.kind] || "materials"] += it.quantity * it.unit_rate; });
     const direct = Object.values(buckets).reduce((a: number, b: any) => a + b, 0) as number;
-    const oh = direct * (parseFloat(overhead) || 0) / 100;
-    const sub = direct + oh;
+    const cont = direct * (parseFloat(contingency) || 0) / 100;
+    const base = direct + cont;
+    const oh = base * (parseFloat(overhead) || 0) / 100;
+    const sub = base + oh;
     const pr = sub * (parseFloat(profit) || 0) / 100;
     const preGst = sub + pr;
     const gst = preGst * 0.1;
-    return { direct, oh, pr, gst, total: preGst + gst };
-  }, [items, overhead, profit]);
+    return { direct, cont, oh, pr, gst, total: preGst + gst };
+  }, [items, overhead, profit, contingency]);
 
   function addRate(rate: any) {
     setItems([...items, {
@@ -71,7 +75,7 @@ export default function Quotes() {
   }
 
   function resetBuilder() {
-    setTitle(""); setCustomerId(null); setItems([]); setOverhead("10"); setProfit("15");
+    setTitle(""); setCustomerId(null); setItems([]); setOverhead("10"); setProfit("15"); setContingency("5");
   }
 
   async function saveQuote() {
@@ -80,6 +84,7 @@ export default function Quotes() {
       method: "POST",
       body: {
         title, customer_id: customerId, items,
+        contingency_percentage: parseFloat(contingency) || 0,
         overhead_percentage: parseFloat(overhead) || 0,
         profit_percentage: parseFloat(profit) || 0,
       },
@@ -108,6 +113,13 @@ export default function Quotes() {
       setDetail(null);
       load();
     } catch {}
+  }
+
+  async function setQuoteStatus(q: any, status: string) {
+    if (q.status === status) return;
+    await api(`/quotes/${q.id}/status`, { method: "PATCH", body: { status } });
+    if (detail?.id === q.id) await openDetail(q.id);
+    load();
   }
 
   return (
@@ -202,6 +214,10 @@ export default function Quotes() {
 
             <View style={styles.rowBetween}>
               <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={styles.label}>Contingency %</Text>
+                <TextInput style={styles.input} value={contingency} onChangeText={setContingency} keyboardType="numeric" testID="contingency-input" />
+              </View>
+              <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={styles.label}>Overhead %</Text>
                 <TextInput style={styles.input} value={overhead} onChangeText={setOverhead} keyboardType="numeric" testID="overhead-input" />
               </View>
@@ -213,6 +229,7 @@ export default function Quotes() {
 
             <View style={styles.breakdown} testID="quote-breakdown">
               <Row l="Direct Costs" v={money(preview.direct)} />
+              <Row l={`Contingency (${contingency}%)`} v={money(preview.cont)} />
               <Row l={`Overheads (${overhead}%)`} v={money(preview.oh)} />
               <Row l={`Profit (${profit}%)`} v={money(preview.pr)} />
               <Row l="GST (10%)" v={money(preview.gst)} />
@@ -224,7 +241,8 @@ export default function Quotes() {
       </Modal>
 
       {/* Rate picker */}
-      <Modal visible={rateModal} animationType="slide" transparent onRequestClose={() => setRateModal(false)}>        <View style={styles.modalWrap}>
+      <Modal visible={rateModal} animationType="slide" transparent onRequestClose={() => setRateModal(false)}>
+        <View style={styles.modalWrap}>
           <View style={styles.sheet}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Victoria Pricing Rates</Text>
@@ -281,6 +299,7 @@ export default function Quotes() {
 
               <View style={styles.breakdown}>
                 <Row l="Direct Costs" v={money(detail.breakdown?.direct_cost || 0)} />
+                <Row l={`Contingency (${detail.contingency_percentage ?? 0}%)`} v={money(detail.breakdown?.contingency || 0)} />
                 <Row l={`Overheads (${detail.overhead_percentage}%)`} v={money(detail.breakdown?.overheads || 0)} />
                 <Row l={`Profit (${detail.profit_percentage}%)`} v={money(detail.breakdown?.profit || 0)} />
                 <Row l="GST (10%)" v={money(detail.breakdown?.gst || 0)} />
@@ -304,13 +323,16 @@ export default function Quotes() {
                 </>
               )}
 
-              <View style={{ marginTop: theme.spacing.lg, gap: theme.spacing.sm }}>
-                {QUOTE_NEXT[detail.status] && (
-                  <Pressable style={styles.detailAction} onPress={() => advance(detail)} testID="detail-advance">
-                    <Ionicons name="send" size={16} color="#fff" />
-                    <Text style={styles.detailActionText}>Mark {QUOTE_NEXT[detail.status]}</Text>
+              <Text style={[styles.label, { marginTop: theme.spacing.md }]}>Adjust status</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+                {QUOTE_STATUSES.map((s) => (
+                  <Pressable key={s} onPress={() => setQuoteStatus(detail, s)} style={[styles.chip, detail.status === s && styles.chipActive]} testID={`detail-status-${s}`}>
+                    <Text style={[styles.chipText, detail.status === s && styles.chipTextActive]}>{s}</Text>
                   </Pressable>
-                )}
+                ))}
+              </ScrollView>
+
+              <View style={{ marginTop: theme.spacing.md, gap: theme.spacing.sm }}>
                 {detail.status === "ACCEPTED" && (
                   <Pressable style={[styles.detailAction, { backgroundColor: theme.colors.success }]} onPress={() => toJob(detail)} testID="detail-tojob">
                     <Ionicons name="hammer" size={16} color="#fff" />

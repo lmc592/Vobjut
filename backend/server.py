@@ -199,6 +199,7 @@ class QuoteInput(BaseModel):
     lead_id: Optional[str] = None
     title: str
     items: List[QuoteLineInput] = []
+    contingency_percentage: float = 0.0
     overhead_percentage: float = 10.0
     profit_percentage: float = 15.0
     valid_days: int = 30
@@ -211,6 +212,7 @@ class CalculateInput(BaseModel):
     subcontractors: float = 0
     delivery: float = 0
     waste: float = 0
+    contingency_percentage: float = 0.0
     overhead_percentage: float = 10.0
     profit_percentage: float = 15.0
     gst_rate: float = GST_RATE
@@ -269,14 +271,17 @@ def calculate_project_quote(inp: CalculateInput) -> Dict[str, float]:
     direct_cost = round(
         inp.materials + inp.labour + inp.equipment
         + inp.subcontractors + inp.delivery + inp.waste, 2)
-    overheads = round(direct_cost * inp.overhead_percentage / 100.0, 2)
-    subtotal = round(direct_cost + overheads, 2)
+    contingency = round(direct_cost * inp.contingency_percentage / 100.0, 2)
+    base = round(direct_cost + contingency, 2)
+    overheads = round(base * inp.overhead_percentage / 100.0, 2)
+    subtotal = round(base + overheads, 2)
     profit = round(subtotal * inp.profit_percentage / 100.0, 2)
     pre_gst = round(subtotal + profit, 2)
     gst = round(pre_gst * inp.gst_rate / 100.0, 2)
     final_total = round(pre_gst + gst, 2)
     return {
         "direct_cost": direct_cost,
+        "contingency": contingency,
         "overheads": overheads,
         "profit": profit,
         "gst": gst,
@@ -285,7 +290,8 @@ def calculate_project_quote(inp: CalculateInput) -> Dict[str, float]:
     }
 
 
-def quote_totals_from_items(items: List[dict], overhead_pct: float, profit_pct: float) -> Dict[str, Any]:
+def quote_totals_from_items(items: List[dict], overhead_pct: float, profit_pct: float,
+                            contingency_pct: float = 0.0) -> Dict[str, Any]:
     buckets = {"materials": 0.0, "labour": 0.0, "equipment": 0.0,
                "subcontractors": 0.0, "delivery": 0.0, "waste": 0.0}
     kind_map = {
@@ -303,6 +309,7 @@ def quote_totals_from_items(items: List[dict], overhead_pct: float, profit_pct: 
         materials=buckets["materials"], labour=buckets["labour"],
         equipment=buckets["equipment"], subcontractors=buckets["subcontractors"],
         delivery=buckets["delivery"], waste=buckets["waste"],
+        contingency_percentage=contingency_pct,
         overhead_percentage=overhead_pct, profit_percentage=profit_pct)
     breakdown = calculate_project_quote(calc_in)
     breakdown["buckets"] = buckets
@@ -699,12 +706,13 @@ async def create_quote(inp: QuoteInput, user: dict = Depends(require_role("EMPLO
     for it in items:
         it["id"] = new_id()
         it["line_total"] = round(it["quantity"] * it["unit_rate"], 2)
-    breakdown = quote_totals_from_items(items, inp.overhead_percentage, inp.profit_percentage)
+    breakdown = quote_totals_from_items(items, inp.overhead_percentage, inp.profit_percentage, inp.contingency_percentage)
     data = {
         "quote_number": await next_quote_number(user["company_id"]),
         "customer_id": inp.customer_id, "lead_id": inp.lead_id, "title": inp.title,
         "items": items, "overhead_percentage": inp.overhead_percentage,
-        "profit_percentage": inp.profit_percentage, "status": "DRAFT",
+        "profit_percentage": inp.profit_percentage,
+        "contingency_percentage": inp.contingency_percentage, "status": "DRAFT",
         "breakdown": breakdown, "version": 1,
         "valid_until": (datetime.now(timezone.utc) + timedelta(days=inp.valid_days)).isoformat(),
     }
@@ -729,11 +737,12 @@ async def edit_quote(qid: str, inp: QuoteInput, user: dict = Depends(require_rol
     for it in items:
         it["id"] = new_id()
         it["line_total"] = round(it["quantity"] * it["unit_rate"], 2)
-    breakdown = quote_totals_from_items(items, inp.overhead_percentage, inp.profit_percentage)
+    breakdown = quote_totals_from_items(items, inp.overhead_percentage, inp.profit_percentage, inp.contingency_percentage)
     data = {
         "customer_id": inp.customer_id, "title": inp.title, "items": items,
         "overhead_percentage": inp.overhead_percentage,
-        "profit_percentage": inp.profit_percentage, "breakdown": breakdown,
+        "profit_percentage": inp.profit_percentage,
+        "contingency_percentage": inp.contingency_percentage, "breakdown": breakdown,
         "version": existing["version"] + 1,
     }
     updated = await update_doc("quotes", qid, data, user)
@@ -745,7 +754,8 @@ async def edit_quote(qid: str, inp: QuoteInput, user: dict = Depends(require_rol
 async def recalc_quote(qid: str, user: dict = Depends(get_current_user)):
     quote = await get_doc("quotes", qid, user)
     breakdown = quote_totals_from_items(
-        quote["items"], quote["overhead_percentage"], quote["profit_percentage"])
+        quote["items"], quote["overhead_percentage"], quote["profit_percentage"],
+        quote.get("contingency_percentage", 0.0))
     await db.quotes.update_one({"id": qid, "company_id": user["company_id"]},
                                {"$set": {"breakdown": breakdown, "updated_at": now_iso()}})
     return breakdown
