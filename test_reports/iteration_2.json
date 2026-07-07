@@ -1,0 +1,31 @@
+{
+  "summary": "Verified bug fix: Quote list cards are now tappable and open a full Quote Detail modal. Full flow tested end-to-end on mobile viewport (390x844) with jane@acme.com.au. Login -> Quotes tab -> FAB opens builder -> title + Add rate -> Save -> new quote appears in list -> TAP card (testID quote-<id>) opens quote-detail-view showing line items (detail-item-0), full breakdown (Direct/Overheads/Profit/GST/Final Total), Valid until date, and Version history (v1). detail-advance progressed DRAFT->SENT->ACCEPTED (detail view refreshed each time). detail-tojob converted ACCEPTED quote to a job and closed the detail modal. Regression: list still loads and reflects status changes. Minor console warnings observed (non-blocking): 'Unexpected text node: A text node cannot be a child of a <View>', 'shadow*' style props deprecated, and 'props.pointerEvents deprecated'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "quotes.tsx (or shared parent)", "issue": "Console warning: 'Unexpected text node:         . A text node cannot be a child of a <View>.' repeated 3x when the Quote Builder modal opens. Likely caused by stray whitespace/newline between JSX elements inside a <View> (e.g., between <Modal> and <View> around line 227 where `transparent onRequestClose={() => setRateModal(false)}>        <View style={styles.modalWrap}>` has whitespace on the same line as the closing tag). Reference: /app/frontend/app/(tabs)/quotes.tsx:227"},
+      {"component": "Global styles", "issue": "Console warning: 'shadow*' style props are deprecated. Use 'boxShadow'. Consider migrating shadow* props for react-native-web compatibility."},
+      {"component": "Global styles", "issue": "Console warning: props.pointerEvents is deprecated. Use style.pointerEvents."}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_2.json"],
+  "action_items": [
+    "Fix stray whitespace/text node between <Modal ...> and <View style={styles.modalWrap}> at /app/frontend/app/(tabs)/quotes.tsx:227 (put the child <View> on a new line so no bare whitespace sits inside the Modal's View child slot).",
+    "Migrate deprecated `shadow*` style props to `boxShadow` and `props.pointerEvents` to `style.pointerEvents` across the codebase (non-blocking, warnings only)."
+  ],
+  "critical_code_review_comments": [
+    "All interactive elements on the Quotes screen expose stable testID values (quote-<id>, quote-detail-view, detail-item-<idx>, detail-advance, detail-tojob, quote-detail-close, quote-add-button, builder-save, quote-title-input, add-line-button, estimate-button) — good testability.",
+    "openDetail/advance/toJob use try/catch around network calls but silently swallow errors — consider surfacing an error toast for better UX.",
+    "Quote card meta text 'tap to view' is a nice affordance for the fix."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% (all requested flows passed)"},
+  "seed_data_creation": "Created one quote titled TEST_Quote_<timestamp> (Q-0001) via UI; it was advanced DRAFT->SENT->ACCEPTED and then converted to a job (so it will no longer appear as an ACCEPTED quote card). No manual cleanup needed for functional retest.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Bug fix VERIFIED. Quote cards are Pressables with testID quote-<id> that open a Modal (testID quote-detail-view) via GET /api/quotes/{id}. Detail modal exposes detail-item-<idx>, detail-advance (state transitions), detail-tojob (ACCEPTED only), and quote-detail-close. Only outstanding items are cosmetic RN-web console warnings.",
+  "rca_of_issue": "Original bug root cause: Quote list rows were rendered as non-interactive <View>, so users had no way to open a saved quote. Fix: converted rows to <Pressable testID={`quote-${id}`} onPress={() => openDetail(id)}> and added a full Quote Detail Modal (visible={!!detail}) that fetches GET /api/quotes/{id} and renders items, breakdown, valid_until, versions, and advance/toJob actions. Verified working end-to-end via Playwright mobile viewport."
+}

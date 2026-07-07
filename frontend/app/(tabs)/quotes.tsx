@@ -23,6 +23,7 @@ export default function Quotes() {
   const [rates, setRates] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [builder, setBuilder] = useState(false);
+  const [detail, setDetail] = useState<any | null>(null);
 
   // builder state
   const [title, setTitle] = useState("");
@@ -86,16 +87,25 @@ export default function Quotes() {
     resetBuilder(); setBuilder(false); load();
   }
 
+  async function openDetail(id: string) {
+    try {
+      const d = await api(`/quotes/${id}`);
+      setDetail(d);
+    } catch {}
+  }
+
   async function advance(q: any) {
     const next = QUOTE_NEXT[q.status];
     if (!next) return;
     await api(`/quotes/${q.id}/status`, { method: "PATCH", body: { status: next } });
+    if (detail?.id === q.id) await openDetail(q.id);
     load();
   }
 
   async function toJob(q: any) {
     try {
       await api(`/quotes/${q.id}/convert-to-job`, { method: "POST" });
+      setDetail(null);
       load();
     } catch {}
   }
@@ -113,7 +123,7 @@ export default function Quotes() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
         ListEmptyComponent={<EmptyState icon="document-text-outline" title="No quotes yet" subtitle="Tap + to build a quote with live Victoria rates" />}
         renderItem={({ item }) => (
-          <View style={styles.card} testID={`quote-${item.id}`}>
+          <Pressable style={styles.card} testID={`quote-${item.id}`} onPress={() => openDetail(item.id)}>
             <View style={styles.cardTop}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.qnum}>{item.quote_number}</Text>
@@ -122,7 +132,7 @@ export default function Quotes() {
               <StatusBadge status={item.status} />
             </View>
             <Text style={styles.total}>{money(item.breakdown?.final_total || 0)}</Text>
-            <Text style={styles.cardMeta}>Direct {money(item.breakdown?.direct_cost || 0)} · GST {money(item.breakdown?.gst || 0)} · v{item.version}</Text>
+            <Text style={styles.cardMeta}>Direct {money(item.breakdown?.direct_cost || 0)} · GST {money(item.breakdown?.gst || 0)} · v{item.version} · tap to view</Text>
             <View style={styles.actions}>
               {QUOTE_NEXT[item.status] && (
                 <Pressable style={styles.actBtn} onPress={() => advance(item)} testID={`quote-advance-${item.id}`}>
@@ -137,7 +147,7 @@ export default function Quotes() {
                 </Pressable>
               )}
             </View>
-          </View>
+          </Pressable>
         )}
       />
 
@@ -241,6 +251,77 @@ export default function Quotes() {
         onClose={() => setEstimatorOpen(false)}
         onAdd={(lines) => setItems((prev) => [...prev, ...lines])}
       />
+
+      {/* Quote detail viewer */}
+      <Modal visible={!!detail} animationType="slide" onRequestClose={() => setDetail(null)}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          <View style={styles.builderHeader}>
+            <Pressable onPress={() => setDetail(null)} testID="quote-detail-close"><Ionicons name="close" size={26} color={theme.colors.text} /></Pressable>
+            <Text style={styles.builderTitle}>{detail?.quote_number}</Text>
+            <View style={{ width: 26 }} />
+          </View>
+          {detail && (
+            <ScrollView contentContainerStyle={{ padding: theme.spacing.md, paddingBottom: 40 }} testID="quote-detail-view">
+              <View style={styles.rowBetween}>
+                <Text style={[styles.cardTitle, { fontSize: 18, flex: 1, marginRight: 8 }]}>{detail.title}</Text>
+                <StatusBadge status={detail.status} />
+              </View>
+              <Text style={styles.total}>{money(detail.breakdown?.final_total || 0)}</Text>
+
+              <Text style={[styles.label, { marginTop: theme.spacing.md }]}>Line items ({detail.items?.length || 0})</Text>
+              {(detail.items || []).map((it: any, idx: number) => (
+                <View key={idx} style={styles.lineItem} testID={`detail-item-${idx}`}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.lineDesc}>{it.description}</Text>
+                    <Text style={styles.lineMeta}>{it.quantity} {it.unit} @ {money(it.unit_rate)} · {it.kind}</Text>
+                  </View>
+                  <Text style={styles.lineTotal}>{money(it.line_total || it.quantity * it.unit_rate)}</Text>
+                </View>
+              ))}
+
+              <View style={styles.breakdown}>
+                <Row l="Direct Costs" v={money(detail.breakdown?.direct_cost || 0)} />
+                <Row l={`Overheads (${detail.overhead_percentage}%)`} v={money(detail.breakdown?.overheads || 0)} />
+                <Row l={`Profit (${detail.profit_percentage}%)`} v={money(detail.breakdown?.profit || 0)} />
+                <Row l="GST (10%)" v={money(detail.breakdown?.gst || 0)} />
+                <View style={styles.divider} />
+                <Row l="Final Total" v={money(detail.breakdown?.final_total || 0)} bold />
+              </View>
+
+              {detail.valid_until && (
+                <Text style={styles.cardMeta}>Valid until {new Date(detail.valid_until).toLocaleDateString("en-AU")}</Text>
+              )}
+
+              {(detail.versions?.length || 0) > 0 && (
+                <>
+                  <Text style={[styles.label, { marginTop: theme.spacing.md }]}>Version history</Text>
+                  {detail.versions.map((v: any) => (
+                    <View key={v.id} style={styles.versionRow}>
+                      <Text style={styles.lineDesc}>v{v.version}</Text>
+                      <Text style={styles.lineMeta}>{money(v.breakdown?.final_total || 0)}</Text>
+                    </View>
+                  ))}
+                </>
+              )}
+
+              <View style={{ marginTop: theme.spacing.lg, gap: theme.spacing.sm }}>
+                {QUOTE_NEXT[detail.status] && (
+                  <Pressable style={styles.detailAction} onPress={() => advance(detail)} testID="detail-advance">
+                    <Ionicons name="send" size={16} color="#fff" />
+                    <Text style={styles.detailActionText}>Mark {QUOTE_NEXT[detail.status]}</Text>
+                  </Pressable>
+                )}
+                {detail.status === "ACCEPTED" && (
+                  <Pressable style={[styles.detailAction, { backgroundColor: theme.colors.success }]} onPress={() => toJob(detail)} testID="detail-tojob">
+                    <Ionicons name="hammer" size={16} color="#fff" />
+                    <Text style={styles.detailActionText}>Convert to Job</Text>
+                  </Pressable>
+                )}
+              </View>
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -289,6 +370,9 @@ const styles = StyleSheet.create({
   blabel: { color: theme.colors.textMuted, fontSize: 14 },
   bval: { color: theme.colors.text, fontSize: 14, fontWeight: "600" },
   divider: { height: 1, backgroundColor: theme.colors.border, marginVertical: 6 },
+  versionRow: { flexDirection: "row", justifyContent: "space-between", backgroundColor: theme.colors.surface, borderRadius: theme.radius.md, padding: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.border, marginBottom: 6 },
+  detailAction: { flexDirection: "row", gap: 8, backgroundColor: theme.colors.primary, height: 50, borderRadius: theme.radius.md, alignItems: "center", justifyContent: "center" },
+  detailActionText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   modalWrap: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
   sheet: { backgroundColor: theme.colors.surface, borderTopLeftRadius: theme.radius.xl, borderTopRightRadius: theme.radius.xl, padding: theme.spacing.lg, maxHeight: "80%" },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: theme.colors.border, alignSelf: "center", marginBottom: theme.spacing.md },
