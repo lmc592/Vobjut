@@ -29,15 +29,25 @@ def concrete_slab(p: dict):
     coverage = _num(p, "mesh_sheet_coverage_m2", 12.5)   # SL72 sheet w/ 200mm laps
     chairs_per_m2 = _num(p, "bar_chairs_per_m2", 3.5)
     waste = _num(p, "waste_pct", 5) / 100.0
+    base_depth = _num(p, "base_depth_m", 0.10)           # compacted road base under slab
+    rock_density = _num(p, "rock_density_t_m3", 2.0)
+    sand_depth = _num(p, "sand_bedding_depth_m", 0.03)   # blinding sand layer
+    sand_density = _num(p, "sand_density_t_m3", 1.5)
     concrete_m3 = area * (thickness_mm / 1000.0) * (1 + waste)
     sheets = math.ceil(area / coverage) if area > 0 and coverage > 0 else 0
     chairs = math.ceil(area * chairs_per_m2)
+    crushed_rock_t = area * base_depth * rock_density
+    sand_t = area * sand_depth * sand_density
     assumptions = {
         "mesh_sheet_coverage_m2": coverage, "bar_chairs_per_m2": chairs_per_m2,
         "thickness_mm": thickness_mm, "waste_pct": _num(p, "waste_pct", 5),
+        "base_depth_m": base_depth, "rock_density_t_m3": rock_density,
+        "sand_bedding_depth_m": sand_depth,
     }
     items = [
         _line(f"Concrete slab supply & lay {int(thickness_mm)}mm", "material", "m2", area, "concrete slab"),
+        _line("Crushed rock 20mm (base)", "material", "tonne", crushed_rock_t, "crushed rock"),
+        _line("Sand - bedding", "material", "tonne", sand_t, "sand - bedding"),
         _line("Reinforcing mesh SL72", "material", "sheet", sheets, "reinforcing mesh"),
         _line("Bar chairs (plastic 50mm)", "material", "unit", chairs, "bar chairs"),
         _line("Concrete supply (volume incl. waste)", "material", "m3", concrete_m3, "reinforced concrete footing"),
@@ -49,15 +59,24 @@ def fencing(p: dict):
     length = _num(p, "length_m", 0)
     panel_w = _num(p, "panel_width_m", 2.4)
     bags_per_post = _num(p, "cement_bags_per_post", 2)
+    rock_per_post = _num(p, "rock_m3_per_post", 0.02)     # road base per post footing
+    sand_per_post = _num(p, "sand_m3_per_post", 0.01)
+    rock_density = _num(p, "rock_density_t_m3", 2.0)
+    sand_density = _num(p, "sand_density_t_m3", 1.5)
     panels = math.ceil(length / panel_w) if length > 0 and panel_w > 0 else 0
     posts = panels + 1 if panels > 0 else 0
     cement_bags = math.ceil(posts * bags_per_post)
+    crushed_rock_t = posts * rock_per_post * rock_density
+    sand_t = posts * sand_per_post * sand_density
     assumptions = {"panel_width_m": panel_w, "posts_rule": "panels + 1 (end post each side)",
-                   "cement_bags_per_post": bags_per_post}
+                   "cement_bags_per_post": bags_per_post, "rock_m3_per_post": rock_per_post,
+                   "sand_m3_per_post": sand_per_post}
     items = [
         _line("Colorbond panel 2.4m x 1.8m", "material", "panel", panels, "colorbond panel"),
         _line("Fence post + concrete footing", "material", "unit", posts, "fence post"),
         _line("Cement bag 20kg (post footings)", "material", "bag", cement_bags, "cement bag"),
+        _line("Crushed rock 20mm (footing base)", "material", "tonne", crushed_rock_t, "crushed rock"),
+        _line("Sand - bedding", "material", "tonne", sand_t, "sand - bedding"),
         _line("Fencing labour", "labour", "day", math.ceil(length / 30) if length else 0, "fencing labourer"),
         _line("Materials delivery (local)", "delivery", "load", 1 if posts > 0 else 0, "materials delivery"),
     ]
@@ -70,6 +89,10 @@ def retaining_wall(p: dict):
     sleeper_len = _num(p, "sleeper_length_m", 2.0)
     sleeper_h = _num(p, "sleeper_height_m", 0.2)
     bags_per_post = _num(p, "cement_bags_per_post", 4)
+    backfill_thickness = _num(p, "drainage_backfill_thickness_m", 0.3)   # crushed rock behind wall
+    base_bedding_m3_per_m = _num(p, "base_bedding_m3_per_m", 0.03)        # sand base per lineal m
+    rock_density = _num(p, "rock_density_t_m3", 2.0)
+    sand_density = _num(p, "sand_density_t_m3", 1.5)
     bays = math.ceil(length / sleeper_len) if length > 0 and sleeper_len > 0 else 0
     courses = math.ceil(height / sleeper_h) if height > 0 and sleeper_h > 0 else 0
     sleepers = bays * courses
@@ -77,17 +100,23 @@ def retaining_wall(p: dict):
     end_beams = 2 if posts_total >= 2 else posts_total
     h_beams = max(posts_total - 2, 0)
     cement_bags = math.ceil(posts_total * bags_per_post)
+    crushed_rock_t = length * height * backfill_thickness * rock_density
+    sand_t = length * base_bedding_m3_per_m * sand_density
     assumptions = {
         "sleeper_length_m": sleeper_len, "sleeper_height_m": sleeper_h,
         "bays": bays, "courses": courses,
         "posts_rule": "bays + 1 (2 end beams, remainder H-beams)",
         "cement_bags_per_post": bags_per_post,
+        "drainage_backfill_thickness_m": backfill_thickness,
+        "base_bedding_m3_per_m": base_bedding_m3_per_m,
     }
     items = [
         _line("Concrete sleeper 2.0m x 200mm", "material", "unit", sleepers, "concrete sleeper 2"),
         _line("Galvanised H-beam post 1.5m", "material", "unit", h_beams, "h-beam post"),
         _line("Retaining wall end beam (C-section)", "material", "unit", end_beams, "end beam"),
         _line("Cement bag 20kg (post footings)", "material", "bag", cement_bags, "cement bag"),
+        _line("Crushed rock 20mm (drainage backfill)", "material", "tonne", crushed_rock_t, "crushed rock"),
+        _line("Sand - bedding (base)", "material", "tonne", sand_t, "sand - bedding"),
         _line("Ag drain & drainage aggregate", "material", "m", length, "ag drain"),
         _line("Materials delivery (local)", "delivery", "load", 1 if posts_total > 0 else 0, "materials delivery"),
     ]
