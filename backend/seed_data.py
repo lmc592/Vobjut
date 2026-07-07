@@ -52,4 +52,13 @@ PRICING_SEED = [
     {"trade": "Equipment", "category": "Equipment", "description": "Plate compactor", "unit": "day", "rate": 95.0},
     {"trade": "Equipment", "category": "Equipment", "description": "Concrete mixer", "unit": "day", "rate": 80.0},
     {"trade": "Equipment", "category": "Equipment", "description": "Scaffolding (per bay/week)", "unit": "week", "rate": 55.0},
+
+    # Takeoff materials (used by the quantity estimator)
+    {"trade": "Concrete", "category": "Materials", "description": "Bar chairs (plastic 50mm)", "unit": "unit", "rate": 0.45},
+    {"trade": "Fencing", "category": "Materials", "description": "Colorbond panel 2.4m x 1.8m", "unit": "panel", "rate": 220.0},
+    {"trade": "Fencing", "category": "Materials", "description": "Fence post + concrete footing", "unit": "unit", "rate": 65.0},
+    {"trade": "Retaining Walls", "category": "Materials", "description": "Concrete sleeper 2.0m x 200mm", "unit": "unit", "rate": 48.0},
+    {"trade": "Retaining Walls", "category": "Materials", "description": "Galvanised H-beam post 1.5m", "unit": "unit", "rate": 95.0},
+    {"trade": "Retaining Walls", "category": "Materials", "description": "Retaining wall end beam (C-section)", "unit": "unit", "rate": 85.0},
+    {"trade": "Earthworks", "category": "Equipment", "description": "Tandem tipper load (6m3) cartage", "unit": "load", "rate": 240.0},
 ]

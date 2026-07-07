@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/src/api/client";
 import { theme } from "@/src/theme";
 import { StatusBadge, EmptyState, Fab, money } from "@/src/components/ui";
+import Estimator from "@/src/components/Estimator";
 
 const KIND_FOR_CATEGORY: Record<string, string> = {
   Materials: "material", Labour: "labour", Equipment: "equipment",
@@ -30,6 +31,7 @@ export default function Quotes() {
   const [overhead, setOverhead] = useState("10");
   const [profit, setProfit] = useState("15");
   const [rateModal, setRateModal] = useState(false);
+  const [estimatorOpen, setEstimatorOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -164,10 +166,16 @@ export default function Quotes() {
 
             <View style={styles.rowBetween}>
               <Text style={styles.label}>Line items</Text>
-              <Pressable style={styles.addLine} onPress={() => setRateModal(true)} testID="add-line-button">
-                <Ionicons name="add" size={16} color={theme.colors.primary} />
-                <Text style={styles.addLineText}>Add from rates</Text>
-              </Pressable>
+              <View style={{ flexDirection: "row", gap: theme.spacing.md }}>
+                <Pressable style={styles.addLine} onPress={() => setEstimatorOpen(true)} testID="estimate-button">
+                  <Ionicons name="calculator" size={16} color={theme.colors.primary} />
+                  <Text style={styles.addLineText}>Estimate qty</Text>
+                </Pressable>
+                <Pressable style={styles.addLine} onPress={() => setRateModal(true)} testID="add-line-button">
+                  <Ionicons name="add" size={16} color={theme.colors.primary} />
+                  <Text style={styles.addLineText}>Add rate</Text>
+                </Pressable>
+              </View>
             </View>
 
             {items.map((it, idx) => (
@@ -206,8 +214,7 @@ export default function Quotes() {
       </Modal>
 
       {/* Rate picker */}
-      <Modal visible={rateModal} animationType="slide" transparent onRequestClose={() => setRateModal(false)}>
-        <View style={styles.modalWrap}>
+      <Modal visible={rateModal} animationType="slide" transparent onRequestClose={() => setRateModal(false)}>        <View style={styles.modalWrap}>
           <View style={styles.sheet}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Victoria Pricing Rates</Text>
@@ -228,6 +235,12 @@ export default function Quotes() {
           </View>
         </View>
       </Modal>
+
+      <Estimator
+        visible={estimatorOpen}
+        onClose={() => setEstimatorOpen(false)}
+        onAdd={(lines) => setItems((prev) => [...prev, ...lines])}
+      />
     </View>
   );
 }

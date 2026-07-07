@@ -14,6 +14,7 @@ import jwt
 import bcrypt
 
 from seed_data import PRICING_SEED
+import estimator
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -213,6 +214,11 @@ class CalculateInput(BaseModel):
     overhead_percentage: float = 10.0
     profit_percentage: float = 15.0
     gst_rate: float = GST_RATE
+
+
+class EstimateInput(BaseModel):
+    trade: str  # concrete_slab | fencing | retaining_wall | turf | earthworks
+    params: Dict[str, Any] = {}
 
 
 class QuoteStatusInput(BaseModel):
@@ -618,6 +624,37 @@ async def calc_quote(inp: CalculateInput, user: dict = Depends(get_current_user)
     return calculate_project_quote(inp)
 
 
+@api_router.post("/estimate-materials")
+async def estimate_materials(inp: EstimateInput, user: dict = Depends(get_current_user)):
+    """Takeoff calculator: dimensions -> material quantities, priced from pricing_rates."""
+    try:
+        items, assumptions = estimator.estimate(inp.trade, inp.params)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # Load available rates once (company custom + global seeded)
+    rates = await db.pricing_rates.find({
+        "deleted_at": None,
+        "$or": [{"company_id": user["company_id"]}, {"company_id": None}],
+    }).to_list(2000)
+    enriched = []
+    subtotal = 0.0
+    for it in items:
+        match = it.pop("match", "").lower()
+        rate_doc = None
+        for r in rates:
+            if match and match in r.get("description", "").lower():
+                rate_doc = r
+                break
+        unit_rate = float(rate_doc["rate"]) if rate_doc else 0.0
+        rate_id = rate_doc["id"] if rate_doc else None
+        line_total = round(it["quantity"] * unit_rate, 2)
+        subtotal += line_total
+        enriched.append({**it, "unit_rate": unit_rate, "pricing_rate_id": rate_id,
+                         "line_total": line_total})
+    return {"trade": inp.trade, "assumptions": assumptions,
+            "items": enriched, "materials_subtotal": round(subtotal, 2)}
+
+
 # ---------------------------------------------------------------------------
 # Quotes
 # ---------------------------------------------------------------------------
@@ -859,6 +896,21 @@ async def startup():
         if docs:
             await db.pricing_rates.insert_many(docs)
         logger.info(f"Seeded {len(docs)} Victoria pricing rates")
+    else:
+        # Idempotently ensure any newly added seed rates exist (matched by description)
+        added = 0
+        for r in PRICING_SEED:
+            found = await db.pricing_rates.find_one(
+                {"company_id": None, "description": r["description"]})
+            if not found:
+                await db.pricing_rates.insert_one({
+                    "id": new_id(), "company_id": None, **r,
+                    "location": "Victoria", "effective_date": now_iso(),
+                    "created_at": now_iso(), "updated_at": now_iso(), "deleted_at": None,
+                })
+                added += 1
+        if added:
+            logger.info(f"Added {added} new Victoria pricing rates")
 
 
 @app.on_event("shutdown")
