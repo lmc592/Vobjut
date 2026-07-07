@@ -221,6 +221,12 @@ class EstimateInput(BaseModel):
     params: Dict[str, Any] = {}
 
 
+class TemplateInput(BaseModel):
+    name: str
+    trade: str
+    params: Dict[str, Any] = {}
+
+
 class QuoteStatusInput(BaseModel):
     status: str
 
@@ -653,6 +659,22 @@ async def estimate_materials(inp: EstimateInput, user: dict = Depends(get_curren
                          "line_total": line_total})
     return {"trade": inp.trade, "assumptions": assumptions,
             "items": enriched, "materials_subtotal": round(subtotal, 2)}
+
+
+@api_router.get("/estimate-templates")
+async def list_templates(user: dict = Depends(get_current_user)):
+    return await list_docs("estimate_templates", user)
+
+
+@api_router.post("/estimate-templates")
+async def create_template(inp: TemplateInput, user: dict = Depends(require_role("EMPLOYEE"))):
+    return await insert_doc("estimate_templates", inp.dict(), user)
+
+
+@api_router.delete("/estimate-templates/{tid}")
+async def delete_template(tid: str, user: dict = Depends(require_role("EMPLOYEE"))):
+    await soft_delete("estimate_templates", tid, user)
+    return {"message": "deleted"}
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, Pressable, Modal, ScrollView, TextInput,
   KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -35,6 +35,48 @@ export default function Estimator({ visible, onClose, onAdd }:
   const [selected, setSelected] = useState<Record<number, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [showSave, setShowSave] = useState(false);
+  const [tplName, setTplName] = useState("");
+  const [rateStr, setRateStr] = useState<Record<number, string>>({});
+
+  useEffect(() => {
+    if (visible) {
+      api("/estimate-templates").then(setTemplates).catch(() => {});
+    }
+  }, [visible]);
+
+  async function loadTemplates() {
+    try { setTemplates(await api("/estimate-templates")); } catch {}
+  }
+
+  function applyTemplate(tpl: any) {
+    const t = TRADES.find((x) => x.key === tpl.trade) || TRADES[0];
+    setTrade(t);
+    const p: Record<string, string> = {};
+    Object.entries(tpl.params || {}).forEach(([k, v]) => { p[k] = String(v); });
+    setParams(p); setItems([]); setAssumptions(null); setSelected({}); setError("");
+  }
+
+  async function saveTemplate() {
+    if (!tplName.trim()) return;
+    const num: Record<string, number> = {};
+    Object.entries(params).forEach(([k, v]) => { num[k] = parseFloat(v) || 0; });
+    await api("/estimate-templates", { method: "POST", body: { name: tplName.trim(), trade: trade.key, params: num } });
+    setTplName(""); setShowSave(false); loadTemplates();
+  }
+
+  async function removeTemplate(id: string) {
+    await api(`/estimate-templates/${id}`, { method: "DELETE" });
+    loadTemplates();
+  }
+
+  function editRate(idx: number, val: string) {
+    setRateStr((prev) => ({ ...prev, [idx]: val }));
+    const r = parseFloat(val) || 0;
+    setItems((prev) => prev.map((it, i) =>
+      i === idx ? { ...it, unit_rate: r, line_total: Math.round(it.quantity * r * 100) / 100 } : it));
+  }
 
   function pickTrade(t: typeof TRADES[0]) {
     setTrade(t);
@@ -54,8 +96,10 @@ export default function Estimator({ visible, onClose, onAdd }:
       setItems(res.items);
       setAssumptions(res.assumptions);
       const sel: Record<number, boolean> = {};
-      res.items.forEach((_, i) => { sel[i] = true; });
+      const rs: Record<number, string> = {};
+      res.items.forEach((it, i) => { sel[i] = true; rs[i] = String(it.unit_rate); });
       setSelected(sel);
+      setRateStr(rs);
     } catch (e: any) {
       setError(e.message || "Could not estimate");
     } finally { setBusy(false); }
@@ -109,18 +153,53 @@ export default function Estimator({ visible, onClose, onAdd }:
           </Pressable>
           {!!error && <Text style={styles.error} testID="est-error">{error}</Text>}
 
+          {templates.length > 0 && (
+            <>
+              <Text style={styles.label}>Saved templates</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+                {templates.map((tpl) => (
+                  <Pressable key={tpl.id} onPress={() => applyTemplate(tpl)} onLongPress={() => removeTemplate(tpl.id)} style={styles.tplChip} testID={`est-tpl-${tpl.id}`}>
+                    <Ionicons name="bookmark" size={13} color={theme.colors.primary} />
+                    <Text style={styles.tplText}>{tpl.name}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <Text style={styles.hint}>Tap to load · long-press to delete</Text>
+            </>
+          )}
+
+          {showSave ? (
+            <View style={styles.saveRow}>
+              <TextInput style={[styles.input, { flex: 1 }]} placeholder="Template name" placeholderTextColor={theme.colors.textMuted}
+                value={tplName} onChangeText={setTplName} testID="est-tpl-name-input" autoFocus />
+              <Pressable style={styles.saveTplBtn} onPress={saveTemplate} testID="est-tpl-save"><Ionicons name="checkmark" size={20} color="#fff" /></Pressable>
+              <Pressable style={styles.saveTplCancel} onPress={() => setShowSave(false)}><Ionicons name="close" size={20} color={theme.colors.text} /></Pressable>
+            </View>
+          ) : (
+            <Pressable style={styles.saveTplLink} onPress={() => setShowSave(true)} testID="est-save-template-button">
+              <Ionicons name="bookmark-outline" size={15} color={theme.colors.primary} />
+              <Text style={styles.addLineText}>Save current inputs as template</Text>
+            </Pressable>
+          )}
+
           {items.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Results — tap to include/exclude</Text>
               {items.map((it, i) => (
-                <Pressable key={i} style={[styles.line, selected[i] && styles.lineOn]} onPress={() => setSelected({ ...selected, [i]: !selected[i] })} testID={`est-line-${i}`}>
-                  <Ionicons name={selected[i] ? "checkbox" : "square-outline"} size={20} color={selected[i] ? theme.colors.primary : theme.colors.textMuted} />
+                <View key={i} style={[styles.line, selected[i] && styles.lineOn]} testID={`est-line-${i}`}>
+                  <Pressable onPress={() => setSelected({ ...selected, [i]: !selected[i] })} testID={`est-line-toggle-${i}`}>
+                    <Ionicons name={selected[i] ? "checkbox" : "square-outline"} size={20} color={selected[i] ? theme.colors.primary : theme.colors.textMuted} />
+                  </Pressable>
                   <View style={{ flex: 1, marginLeft: 10 }}>
                     <Text style={styles.lineDesc}>{it.description}</Text>
-                    <Text style={styles.lineMeta}>{it.quantity} {it.unit} @ {money(it.unit_rate)}{it.unit_rate === 0 ? " (no rate — set later)" : ""}</Text>
+                    <View style={styles.rateRow}>
+                      <Text style={styles.lineMeta}>{it.quantity} {it.unit} @ $</Text>
+                      <TextInput style={styles.rateInput} keyboardType="numeric" value={rateStr[i] ?? ""}
+                        onChangeText={(v) => editRate(i, v)} testID={`est-rate-input-${i}`} />
+                    </View>
                   </View>
                   <Text style={styles.lineTotal}>{money(it.line_total)}</Text>
-                </Pressable>
+                </View>
               ))}
 
               {assumptions && (
@@ -164,6 +243,16 @@ const styles = StyleSheet.create({
   calcBtn: { flexDirection: "row", gap: 8, backgroundColor: theme.colors.primary, height: 52, borderRadius: theme.radius.md, alignItems: "center", justifyContent: "center", marginTop: theme.spacing.md },
   calcText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   error: { color: theme.colors.danger, fontSize: 13, marginTop: 8 },
+  hint: { color: theme.colors.textMuted, fontSize: 11, marginTop: 4, fontStyle: "italic" },
+  tplChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, height: 34, borderRadius: 17, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.primary, flexShrink: 0 },
+  tplText: { color: theme.colors.text, fontWeight: "600", fontSize: 12 },
+  saveRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: theme.spacing.md },
+  saveTplBtn: { width: 48, height: 48, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, alignItems: "center", justifyContent: "center" },
+  saveTplCancel: { width: 48, height: 48, borderRadius: theme.radius.md, backgroundColor: theme.colors.surfaceAlt, alignItems: "center", justifyContent: "center" },
+  saveTplLink: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: theme.spacing.md },
+  addLineText: { color: theme.colors.primary, fontWeight: "700", fontSize: 13 },
+  rateRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  rateInput: { minWidth: 60, height: 30, backgroundColor: theme.colors.surfaceAlt, borderRadius: 6, paddingHorizontal: 8, color: theme.colors.text, borderWidth: 1, borderColor: theme.colors.border, fontSize: 12, marginLeft: 2 },
   sectionTitle: { color: theme.colors.text, fontSize: 15, fontWeight: "700", marginTop: theme.spacing.lg, marginBottom: theme.spacing.sm },
   line: { flexDirection: "row", alignItems: "center", backgroundColor: theme.colors.surface, borderRadius: theme.radius.md, padding: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.border, marginBottom: 8, opacity: 0.55 },
   lineOn: { opacity: 1, borderColor: theme.colors.primary },
