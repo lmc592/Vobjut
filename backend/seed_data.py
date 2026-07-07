@@ -61,4 +61,5 @@ PRICING_SEED = [
     {"trade": "Retaining Walls", "category": "Materials", "description": "Galvanised H-beam post 1.5m", "unit": "unit", "rate": 95.0},
     {"trade": "Retaining Walls", "category": "Materials", "description": "Retaining wall end beam (C-section)", "unit": "unit", "rate": 85.0},
     {"trade": "Earthworks", "category": "Equipment", "description": "Tandem tipper load (6m3) cartage", "unit": "load", "rate": 240.0},
+    {"trade": "Materials", "category": "Materials", "description": "Materials delivery (local)", "unit": "load", "rate": 120.0},
 ]

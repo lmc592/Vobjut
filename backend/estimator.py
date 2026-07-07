@@ -48,13 +48,18 @@ def concrete_slab(p: dict):
 def fencing(p: dict):
     length = _num(p, "length_m", 0)
     panel_w = _num(p, "panel_width_m", 2.4)
+    bags_per_post = _num(p, "cement_bags_per_post", 2)
     panels = math.ceil(length / panel_w) if length > 0 and panel_w > 0 else 0
     posts = panels + 1 if panels > 0 else 0
-    assumptions = {"panel_width_m": panel_w, "posts_rule": "panels + 1 (end post each side)"}
+    cement_bags = math.ceil(posts * bags_per_post)
+    assumptions = {"panel_width_m": panel_w, "posts_rule": "panels + 1 (end post each side)",
+                   "cement_bags_per_post": bags_per_post}
     items = [
         _line("Colorbond panel 2.4m x 1.8m", "material", "panel", panels, "colorbond panel"),
         _line("Fence post + concrete footing", "material", "unit", posts, "fence post"),
+        _line("Cement bag 20kg (post footings)", "material", "bag", cement_bags, "cement bag"),
         _line("Fencing labour", "labour", "day", math.ceil(length / 30) if length else 0, "fencing labourer"),
+        _line("Materials delivery (local)", "delivery", "load", 1 if posts > 0 else 0, "materials delivery"),
     ]
     return items, assumptions
 
@@ -64,22 +69,27 @@ def retaining_wall(p: dict):
     height = _num(p, "height_m", 0)
     sleeper_len = _num(p, "sleeper_length_m", 2.0)
     sleeper_h = _num(p, "sleeper_height_m", 0.2)
+    bags_per_post = _num(p, "cement_bags_per_post", 4)
     bays = math.ceil(length / sleeper_len) if length > 0 and sleeper_len > 0 else 0
     courses = math.ceil(height / sleeper_h) if height > 0 and sleeper_h > 0 else 0
     sleepers = bays * courses
     posts_total = bays + 1 if bays > 0 else 0
     end_beams = 2 if posts_total >= 2 else posts_total
     h_beams = max(posts_total - 2, 0)
+    cement_bags = math.ceil(posts_total * bags_per_post)
     assumptions = {
         "sleeper_length_m": sleeper_len, "sleeper_height_m": sleeper_h,
         "bays": bays, "courses": courses,
         "posts_rule": "bays + 1 (2 end beams, remainder H-beams)",
+        "cement_bags_per_post": bags_per_post,
     }
     items = [
         _line("Concrete sleeper 2.0m x 200mm", "material", "unit", sleepers, "concrete sleeper 2"),
         _line("Galvanised H-beam post 1.5m", "material", "unit", h_beams, "h-beam post"),
         _line("Retaining wall end beam (C-section)", "material", "unit", end_beams, "end beam"),
+        _line("Cement bag 20kg (post footings)", "material", "bag", cement_bags, "cement bag"),
         _line("Ag drain & drainage aggregate", "material", "m", length, "ag drain"),
+        _line("Materials delivery (local)", "delivery", "load", 1 if posts_total > 0 else 0, "materials delivery"),
     ]
     return items, assumptions
 
@@ -87,11 +97,15 @@ def retaining_wall(p: dict):
 def turf(p: dict):
     area = _num(p, "area_m2", 0)
     waste = _num(p, "waste_pct", 5) / 100.0
+    bags_per_m2 = _num(p, "cement_bags_per_m2", 0.05)
     turf_m2 = area * (1 + waste)
-    assumptions = {"waste_pct": _num(p, "waste_pct", 5)}
+    cement_bags = math.ceil(area * bags_per_m2)
+    assumptions = {"waste_pct": _num(p, "waste_pct", 5), "cement_bags_per_m2": bags_per_m2}
     items = [
         _line("Turf supply & lay (Sir Walter)", "material", "m2", turf_m2, "turf supply"),
         _line("Garden bed soil", "material", "m3", area * 0.1, "garden bed soil"),
+        _line("Cement bag 20kg (edging/mowing strip)", "material", "bag", cement_bags, "cement bag"),
+        _line("Materials delivery (local)", "delivery", "load", 1 if area > 0 else 0, "materials delivery"),
     ]
     return items, assumptions
 
