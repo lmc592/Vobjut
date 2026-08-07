@@ -31,9 +31,25 @@ dist/
 dist
 
 # Environment files (comprehensive coverage)
-
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
 *token.json*
 *credentials.json*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Generated / local memory (contains test credentials — keep private)
+/memory/
 
 # Logs and debug files
 npm-debug.log*
