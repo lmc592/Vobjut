@@ -1,0 +1,42 @@
+{
+  "summary": "Comprehensive button-sweep across every screen for Contractor OS. Backend: 19/20 pytest pass (1 pre-existing unrelated test_auth_me case-sensitivity failure). Frontend UI sweep with jane@acme.com.au covered AUTH, DASHBOARD, QUOTES (list + builder + detail), ESTIMATOR, CRM, JOBS. CRITICAL REGRESSION on restructured Quote card VERIFIED FIXED: tapping quote-advance-<id> and quote-tojob-<id> perform ONLY their action and do NOT open the quote-detail modal (nested-Pressable bubbling issue resolved). All primary onPress handlers wired and firing: toggle-mode-button (login<->register), auth-submit-button (bad creds shows auth-error, good creds logs in), logout-button (clears session but see BUG below), Quotes FAB (quote-add-button) opens Quote Builder, add-line-button opens rate picker, rate-<id> adds line + qty-input-0 editable, recommend-margins-button fills contingency/overhead/profit (7.5/15/25 for the tested line) + shows recommendation-text and live-updates quote-breakdown, estimate-button opens Estimator with est-trade-* + est-calculate-button, estimator-close discards, builder-close discards, quote-open-<id> opens detail modal, detail-status-SENT changes status successfully, detail-edit visible when DRAFT/SENT, quote-detail-close closes, CRM crm-tab-leads/customers switching + crm-add-button + lead-title-input/customer-name-input + crm-save-button save + lead-advance-<id> advances pipeline, Jobs job-<id> opens detail, progress-plus/minus adjust progress, job-status-IN_PROGRESS changes status, job-note-input + job-note-add adds note, job-detail-close closes. ONE BUG FOUND: logout-button clears session state (user=null) but does NOT navigate to /login — the auth guard exists only in /app/frontend/app/index.tsx and there is no guard in (tabs)/_layout.tsx, so after logout the user is left stranded on the dashboard tab with an empty 'Hi,' header and no route change. Deprecated-package check: no deprecated Expo packages (expo-av / expo-barcode-scanner / expo-background-fetch) present. Cosmetic RN-web console warnings persist (shadow* → boxShadow, props.pointerEvents → style.pointerEvents) — non-blocking.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/me (test only)", "issue": "Pre-existing test_auth_me case-sensitivity assertion — backend lowercases emails on register but fixture stores original case. Product not affected."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "logout-button (dashboard)", "issue": "After tapping logout-button on (tabs)/index.tsx, useAuth().logout() clears token+user+company but the user is NOT redirected to /login. Root cause: only app/index.tsx contains a redirect based on `user`; the (tabs)/_layout.tsx has no auth guard, so post-logout the tabs stack keeps rendering with user=null (header shows blank 'Hi,'; API calls will 401). Fix: add a useEffect/Redirect in app/(tabs)/_layout.tsx that router.replace('/login') when !user && !loading, or call router.replace('/login') at the end of AuthContext.logout(). Reference: /app/frontend/src/context/AuthContext.tsx:69 and /app/frontend/app/(tabs)/_layout.tsx (no user-guard) and /app/frontend/app/index.tsx:13-14.", "testID": "logout-button", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Global styles (RN-web)", "issue": "Console warning: 'shadow*' style props are deprecated — migrate to boxShadow. Non-blocking."},
+      {"component": "Global styles (RN-web)", "issue": "Console warning: props.pointerEvents is deprecated — use style.pointerEvents. Non-blocking."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_6.json",
+    "/app/backend/tests/test_contractor_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix logout navigation: at end of AuthContext.logout() add `router.replace('/login')`, OR add auth guard in /app/frontend/app/(tabs)/_layout.tsx that redirects when user becomes null (mirror the effect in /app/frontend/app/index.tsx). Currently a logged-out user remains on the dashboard tab with a broken empty header until manual navigation.",
+    "(Optional/pre-existing) Fix test_auth_me email case comparison in /app/backend/tests/test_contractor_api.py (compare via .lower()).",
+    "(Cosmetic/pre-existing) Migrate deprecated RN-web shadow* → boxShadow and props.pointerEvents → style.pointerEvents."
+  ],
+  "critical_code_review_comments": [
+    "Quote card restructure in /app/frontend/app/(tabs)/quotes.tsx:169-195 is correct — outer <View testID=quote-{id}>, only the info area is a Pressable testID=quote-open-{id}, and the action buttons (quote-advance-{id}, quote-tojob-{id}) are SIBLING Pressables inside <View style={styles.actions}>. This eliminates the nested-Pressable bubble on react-native-web; regression verified in browser (tap advance/tojob does NOT open detail modal).",
+    "Auth routing gap: (tabs)/_layout.tsx has no user guard; app/index.tsx only guards the ROOT '/' route. Any post-login state change to user=null (logout OR token expiry) will not force a redirect while the user is on a tab route. Recommend adding a top-level redirect in the tabs layout OR performing router.replace('/login') inside AuthContext.logout().",
+    "All Quotes/CRM/Jobs onPress handlers point to real, non-empty functions (verified by grep + runtime execution). No stub / no-op onPress found."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "19/20 (95%) — 1 pre-existing unrelated failure", "frontend": "20/21 button flows pass (95%) — only logout redirect fails"},
+  "seed_data_creation": "During UI sweep created: TEST_BTNSweep_Cust (customer via crm), TEST_BTNSweep_Lead (lead advanced one status), a job note 'TEST note sweep', a job status change to IN_PROGRESS via chip, and DETAIL-status SENT on the first quote. No quotes were saved from builder (builder-close used to discard). No destructive conversions performed on ACCEPTED quotes (tojob click was tested for regression only and did convert Q-0003; expected side-effect of the button).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All buttons across AUTH/DASHBOARD/QUOTES(list+builder+detail)/ESTIMATOR/CRM/JOBS are wired and firing correctly. The ONLY failing button is logout-button: it clears session state but does not navigate to /login due to missing auth guard in (tabs)/_layout.tsx. Retest: after main agent adds the redirect, verify (a) logout-button on dashboard returns you to the login screen with auth-submit-button visible, (b) direct URL access to /quotes /jobs /crm while logged out redirects to /login. Critical regression for Quote card restructure (advance/tojob do NOT open detail) is PASSING and should be re-checked after the logout fix ships to ensure no regression in Quote card handlers.",
+  "rca_of_issue": "Logout stranded-on-dashboard bug: The Expo Router auth flow has only one redirect point (/app/frontend/app/index.tsx useEffect on user), which fires only when the '/' route is mounted. Once inside the (tabs) group, no layout observes `user` from useAuth(), so useAuth().logout() successfully calls clearToken()+setUser(null)+setCompany(null) but the currently-mounted tab screen keeps rendering (empty user causes 'Hi,' blank header + subsequent API calls 401). Reproduction: 1) login jane@acme.com.au/pass123 2) tap logout-button 3) observe URL still '/' and dashboard still displayed with blank name. Mitigation options (choose one): (A) In /app/frontend/src/context/AuthContext.tsx logout() append `router.replace('/login')` using useRouter from expo-router; (B) In /app/frontend/app/(tabs)/_layout.tsx add `const { user, loading } = useAuth(); if (!loading && !user) return <Redirect href='/login' />;` before returning <Tabs/>. Option B also fixes direct-URL access when logged out."
+}
