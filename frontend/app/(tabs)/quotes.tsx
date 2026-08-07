@@ -166,16 +166,18 @@ export default function Quotes() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
         ListEmptyComponent={<EmptyState icon="document-text-outline" title="No quotes yet" subtitle="Tap + to build a quote with live Victoria rates" />}
         renderItem={({ item }) => (
-          <Pressable style={styles.card} testID={`quote-${item.id}`} onPress={() => openDetail(item.id)}>
-            <View style={styles.cardTop}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.qnum}>{item.quote_number}</Text>
-                <Text style={styles.cardTitle}>{item.title}</Text>
+          <View style={styles.card} testID={`quote-${item.id}`}>
+            <Pressable onPress={() => openDetail(item.id)} testID={`quote-open-${item.id}`}>
+              <View style={styles.cardTop}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.qnum}>{item.quote_number}</Text>
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                </View>
+                <StatusBadge status={item.status} />
               </View>
-              <StatusBadge status={item.status} />
-            </View>
-            <Text style={styles.total}>{money(item.breakdown?.final_total || 0)}</Text>
-            <Text style={styles.cardMeta}>Direct {money(item.breakdown?.direct_cost || 0)} · GST {money(item.breakdown?.gst || 0)} · v{item.version} · tap to view</Text>
+              <Text style={styles.total}>{money(item.breakdown?.final_total || 0)}</Text>
+              <Text style={styles.cardMeta}>Direct {money(item.breakdown?.direct_cost || 0)} · GST {money(item.breakdown?.gst || 0)} · v{item.version} · tap to view</Text>
+            </Pressable>
             <View style={styles.actions}>
               {QUOTE_NEXT[item.status] && (
                 <Pressable style={styles.actBtn} onPress={() => advance(item)} testID={`quote-advance-${item.id}`}>
@@ -190,7 +192,7 @@ export default function Quotes() {
                 </Pressable>
               )}
             </View>
-          </Pressable>
+          </View>
         )}
       />
 
