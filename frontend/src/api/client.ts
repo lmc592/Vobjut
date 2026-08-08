@@ -1,6 +1,6 @@
 import { storage } from "@/src/utils/storage";
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BASE = process.env.EXPO_PUBLIC_BACKEND_URL ?? "";
 const TOKEN_KEY = "cos_token";
 
 export async function getToken(): Promise<string | null> {
